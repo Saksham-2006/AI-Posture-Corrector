@@ -1,23 +1,38 @@
 import { Link, useLocation } from "wouter";
-import { Home, Activity, BarChart3, Settings, Flame } from "lucide-react";
+import { Home, Activity, BarChart3, Settings, Flame, Trophy } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Sun, Moon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useSessions } from "@/features/sessions/useSessions";
 import { computeStreak } from "@/features/sessions/streak";
+import { computeXP } from "@/features/gamification/xp";
+import { countGoalDays } from "@/features/gamification/goals";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { SETTINGS_KEY } from "@/features/sessions/sessionStore";
+import { LevelBadge } from "@/components/LevelBadge";
 
 const NAV = [
   { to: "/", label: "Dashboard", Icon: Home },
   { to: "/live", label: "Live", Icon: Activity },
   { to: "/analytics", label: "Analytics", Icon: BarChart3 },
+  { to: "/profile", label: "Profile", Icon: Trophy },
   { to: "/settings", label: "Settings", Icon: Settings },
 ];
+
+type Settings = { dailyGoalMin: number };
 
 export function Sidebar() {
   const [loc] = useLocation();
   const { sessions } = useSessions();
+  const [settings] = useLocalStorage<Settings>(SETTINGS_KEY, { dailyGoalMin: 30 });
   const streak = computeStreak(sessions);
+  const goalDays = useMemo(
+    () => countGoalDays(sessions, settings.dailyGoalMin ?? 30),
+    [sessions, settings.dailyGoalMin],
+  );
+  const xp = useMemo(() => computeXP(sessions, goalDays), [sessions, goalDays]);
+
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -32,8 +47,12 @@ export function Sidebar() {
         </div>
       </div>
 
-      <div className="mx-2 my-3 flex items-center gap-2 rounded-xl bg-primary/8 px-3 py-2.5 ring-1 ring-primary/15">
-        <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/15 text-primary">
+      <div className="mx-2 my-3">
+        <LevelBadge xp={xp} compact />
+      </div>
+
+      <div className="mx-2 mb-3 flex items-center gap-2 rounded-xl bg-amber-100/50 px-3 py-2.5 ring-1 ring-amber-200/40 dark:bg-amber-500/10 dark:ring-amber-500/20">
+        <div className="grid h-8 w-8 place-items-center rounded-lg bg-amber-200/70 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
           <Flame className="h-4 w-4" />
         </div>
         <div className="flex flex-col leading-tight">
@@ -42,7 +61,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <nav className="mt-2 flex flex-col gap-1">
+      <nav className="mt-1 flex flex-col gap-1">
         {NAV.map(({ to, label, Icon }) => {
           const active = loc === to;
           return (

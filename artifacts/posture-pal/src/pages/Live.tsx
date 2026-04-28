@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, AlertCircle, Loader2, Lightbulb, RefreshCw } from "lucide-react";
+import { Camera, AlertCircle, Loader2, RefreshCw, Coffee } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -10,9 +10,11 @@ import { ScoreDial } from "@/components/posture/ScoreDial";
 import { StatusPill } from "@/components/posture/StatusPill";
 import { SessionControls } from "@/components/posture/SessionControls";
 import { SkeletonOverlay } from "@/components/posture/SkeletonOverlay";
+import { AICoachPanel } from "@/components/AICoachPanel";
+import { SnapshotPanel } from "@/components/SnapshotPanel";
 import { usePoseDetector } from "@/features/posture/usePoseDetector";
-import { computeMetrics } from "@/features/posture/postureMetrics";
-import { classifyScore, scorePosture, DEFAULT_THRESHOLDS } from "@/features/posture/scoring";
+import { computeMetrics, type PostureMetrics } from "@/features/posture/postureMetrics";
+import { classifyScore, scorePosture, DEFAULT_THRESHOLDS, type ScoreBreakdown } from "@/features/posture/scoring";
 import { useSessions } from "@/features/sessions/useSessions";
 import { newSessionId, type Session, type PostureClass } from "@/features/sessions/sessionStore";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -25,6 +27,8 @@ type Settings = {
   alertDelaySec: number;
   goodCutoff: number;
   badCutoff: number;
+  dailyGoalMin: number;
+  breakRemindersMin: number;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -32,6 +36,8 @@ const DEFAULT_SETTINGS: Settings = {
   alertDelaySec: 5,
   goodCutoff: DEFAULT_THRESHOLDS.goodCutoff,
   badCutoff: DEFAULT_THRESHOLDS.badCutoff,
+  dailyGoalMin: 30,
+  breakRemindersMin: 25,
 };
 
 type CamState = "idle" | "requesting" | "ready" | "denied" | "error";
@@ -46,6 +52,8 @@ export default function Live() {
   const [videoSize, setVideoSize] = useState({ w: 0, h: 0 });
 
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
+  const [metrics, setMetrics] = useState<PostureMetrics | null>(null);
+  const [breakdown, setBreakdown] = useState<ScoreBreakdown | null>(null);
   const [score, setScore] = useState<number>(0);
   const [confidence, setConfidence] = useState<number>(0);
   const [postureClass, setPostureClass] = useState<PostureClass | null>(null);
@@ -65,7 +73,9 @@ export default function Live() {
   const lastSampleAtRef = useRef<number>(0);
   const badStartedAtRef = useRef<number | null>(null);
   const lastAlertAtRef = useRef<number>(0);
+  const lastBreakReminderAtRef = useRef<number>(0);
   const [elapsed, setElapsed] = useState<number>(0);
+  const [accDisplay, setAccDisplay] = useState({ good: 0, fair: 0, bad: 0 });
 
   const [settings] = useLocalStorage<Settings>(SETTINGS_KEY, DEFAULT_SETTINGS);
   const { add } = useSessions();
@@ -77,17 +87,20 @@ export default function Live() {
     videoRef,
     onResult: useCallback((frame: { landmarks: Landmark[] | null; timestamp: number }) => {
       const m = computeMetrics(frame.landmarks);
+      setLandmarks(frame.landmarks);
       if (!m) {
-        setLandmarks(frame.landmarks);
+        setMetrics(null);
+        setBreakdown(null);
         return;
       }
-      const breakdown = scorePosture(m);
-      setLandmarks(frame.landmarks);
-      setScore(breakdown.total);
+      const b = scorePosture(m);
+      setMetrics(m);
+      setBreakdown(b);
+      setScore(b.total);
       setConfidence(m.visibility);
       setPostureClass((prev) =>
         classifyScore(
-          breakdown.total,
+          b.total,
           { goodCutoff: settings.goodCutoff, badCutoff: settings.badCutoff },
           prev ?? undefined,
         ),
@@ -95,7 +108,6 @@ export default function Live() {
     }, [settings.goodCutoff, settings.badCutoff]),
   });
 
-  // Webcam lifecycle
   const startCamera = useCallback(async () => {
     setCamError(null);
     setCamState("requesting");
@@ -139,7 +151,6 @@ export default function Live() {
     };
   }, []);
 
-  // Session timer + accumulation
   useEffect(() => {
     if (sessionState !== "running") return;
     const id = setInterval(() => {
@@ -155,18 +166,16 @@ export default function Live() {
         accumulatedRef.current.scoreCount += 1;
       }
 
-      // Sample every ~2s
       if (now - lastSampleAtRef.current > 2000 && postureClass) {
         const t = (now - sessionStartRef.current) / 1000;
         samplesRef.current.push({ t: Math.round(t), score, cls: postureClass });
         if (samplesRef.current.length > 1800) {
-          // cap to 1 hour at 2s cadence
           samplesRef.current = samplesRef.current.slice(-1800);
         }
         lastSampleAtRef.current = now;
       }
 
-      // Alert logic
+      // Bad-posture alert
       if (postureClass === "bad") {
         if (badStartedAtRef.current === null) badStartedAtRef.current = now;
         const badFor = (now - badStartedAtRef.current) / 1000;
@@ -183,10 +192,30 @@ export default function Live() {
         badStartedAtRef.current = null;
       }
 
-      setElapsed((now - sessionStartRef.current) / 1000);
+      // Break reminder
+      const elapsedSec = (now - sessionStartRef.current) / 1000;
+      const breakInterval = settings.breakRemindersMin * 60;
+      if (
+        breakInterval > 0 &&
+        elapsedSec >= breakInterval &&
+        elapsedSec - lastBreakReminderAtRef.current >= breakInterval
+      ) {
+        lastBreakReminderAtRef.current = elapsedSec;
+        toast({
+          title: "Break time",
+          description: `${Math.round(elapsedSec / 60)} minutes in — try a stretch, a sip of water, or a quick walk.`,
+        });
+      }
+
+      setElapsed(elapsedSec);
+      setAccDisplay({
+        good: Math.round(accumulatedRef.current.good),
+        fair: Math.round(accumulatedRef.current.fair),
+        bad: Math.round(accumulatedRef.current.bad),
+      });
     }, 250);
     return () => clearInterval(id);
-  }, [sessionState, postureClass, score, settings.alertDelaySec, settings.alertSound, toast]);
+  }, [sessionState, postureClass, score, settings.alertDelaySec, settings.alertSound, settings.breakRemindersMin, toast]);
 
   const onStart = useCallback(async () => {
     if (camState !== "ready") {
@@ -199,7 +228,9 @@ export default function Live() {
     lastSampleAtRef.current = 0;
     badStartedAtRef.current = null;
     lastAlertAtRef.current = 0;
+    lastBreakReminderAtRef.current = 0;
     setElapsed(0);
+    setAccDisplay({ good: 0, fair: 0, bad: 0 });
     setSessionState("running");
   }, [camState, startCamera]);
 
@@ -253,108 +284,115 @@ export default function Live() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         {/* Webcam panel */}
-        <Card className="overflow-hidden border-card-border">
-          <div
-            ref={containerRef}
-            className="relative w-full bg-gradient-to-br from-muted/40 to-muted overflow-hidden"
-            style={{ aspectRatio: aspect }}
-          >
-            <video
-              ref={videoRef}
-              playsInline
-              muted
-              autoPlay
-              className="absolute inset-0 h-full w-full object-cover"
-              style={{ transform: "scaleX(-1)" }}
-            />
-            <SkeletonOverlay
-              landmarks={landmarks}
-              videoWidth={videoSize.w}
-              videoHeight={videoSize.h}
-              postureClass={postureClass}
-              mirrored
-            />
+        <div className="space-y-6">
+          <Card className="overflow-hidden border-card-border">
+            <div
+              ref={containerRef}
+              className="relative w-full bg-gradient-to-br from-muted/40 to-muted overflow-hidden"
+              style={{ aspectRatio: aspect }}
+            >
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                autoPlay
+                className="absolute inset-0 h-full w-full object-cover"
+                style={{ transform: "scaleX(-1)" }}
+              />
+              <SkeletonOverlay
+                landmarks={landmarks}
+                videoWidth={videoSize.w}
+                videoHeight={videoSize.h}
+                postureClass={postureClass}
+                mirrored
+              />
 
-            {/* Overlay states */}
-            <AnimatePresence>
-              {camState === "idle" && (
-                <Overlay key="idle">
-                  <div className="grid h-16 w-16 place-items-center rounded-2xl bg-primary/20 text-primary">
-                    <Camera className="h-7 w-7" />
-                  </div>
-                  <h3 className="mt-4 text-xl font-semibold">Turn on your camera</h3>
-                  <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                    We need access to your webcam to read your posture. Video stays on this device.
-                  </p>
-                  <Button onClick={startCamera} className="mt-5 gap-2" data-testid="button-enable-camera">
-                    <Camera className="h-4 w-4" /> Enable camera
-                  </Button>
-                </Overlay>
-              )}
-              {camState === "requesting" && (
-                <Overlay key="req">
-                  <Loader2 className="h-7 w-7 animate-spin text-primary" />
-                  <h3 className="mt-4 text-lg font-semibold">Asking for camera…</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">Please allow access in your browser.</p>
-                </Overlay>
-              )}
-              {camState === "denied" && (
-                <Overlay key="denied">
-                  <div className="grid h-16 w-16 place-items-center rounded-2xl bg-destructive/15 text-destructive">
-                    <AlertCircle className="h-7 w-7" />
-                  </div>
-                  <h3 className="mt-4 text-xl font-semibold">Camera blocked</h3>
-                  <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                    Allow camera access in your browser address bar, then try again.
-                  </p>
-                  <Button onClick={startCamera} variant="outline" className="mt-5 gap-2">
-                    <RefreshCw className="h-4 w-4" /> Try again
-                  </Button>
-                </Overlay>
-              )}
-              {camState === "error" && (
-                <Overlay key="err">
-                  <div className="grid h-16 w-16 place-items-center rounded-2xl bg-destructive/15 text-destructive">
-                    <AlertCircle className="h-7 w-7" />
-                  </div>
-                  <h3 className="mt-4 text-xl font-semibold">Could not start camera</h3>
-                  <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                    {camError ?? "Something went wrong starting your camera."}
-                  </p>
-                  <Button onClick={startCamera} className="mt-5 gap-2">
-                    <RefreshCw className="h-4 w-4" /> Try again
-                  </Button>
-                </Overlay>
-              )}
-              {camState === "ready" && detectorStatus === "loading" && (
-                <Overlay key="model">
-                  <Loader2 className="h-7 w-7 animate-spin text-primary" />
-                  <h3 className="mt-4 text-lg font-semibold">Loading AI model…</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">First time may take a moment.</p>
-                </Overlay>
-              )}
-              {camState === "ready" && detectorStatus === "error" && (
-                <Overlay key="modelErr">
-                  <div className="grid h-16 w-16 place-items-center rounded-2xl bg-destructive/15 text-destructive">
-                    <AlertCircle className="h-7 w-7" />
-                  </div>
-                  <h3 className="mt-4 text-xl font-semibold">AI model failed to load</h3>
-                  <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                    {detectorError ?? "Try refreshing the page."}
-                  </p>
-                </Overlay>
-              )}
-            </AnimatePresence>
+              <AnimatePresence>
+                {camState === "idle" && (
+                  <Overlay key="idle">
+                    <div className="grid h-16 w-16 place-items-center rounded-2xl bg-primary/20 text-primary">
+                      <Camera className="h-7 w-7" />
+                    </div>
+                    <h3 className="mt-4 text-xl font-semibold">Turn on your camera</h3>
+                    <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                      We need access to your webcam to read your posture. Video stays on this device.
+                    </p>
+                    <Button onClick={startCamera} className="mt-5 gap-2" data-testid="button-enable-camera">
+                      <Camera className="h-4 w-4" /> Enable camera
+                    </Button>
+                  </Overlay>
+                )}
+                {camState === "requesting" && (
+                  <Overlay key="req">
+                    <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                    <h3 className="mt-4 text-lg font-semibold">Asking for camera…</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">Please allow access in your browser.</p>
+                  </Overlay>
+                )}
+                {camState === "denied" && (
+                  <Overlay key="denied">
+                    <div className="grid h-16 w-16 place-items-center rounded-2xl bg-destructive/15 text-destructive">
+                      <AlertCircle className="h-7 w-7" />
+                    </div>
+                    <h3 className="mt-4 text-xl font-semibold">Camera blocked</h3>
+                    <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                      Allow camera access in your browser address bar, then try again.
+                    </p>
+                    <Button onClick={startCamera} variant="outline" className="mt-5 gap-2">
+                      <RefreshCw className="h-4 w-4" /> Try again
+                    </Button>
+                  </Overlay>
+                )}
+                {camState === "error" && (
+                  <Overlay key="err">
+                    <div className="grid h-16 w-16 place-items-center rounded-2xl bg-destructive/15 text-destructive">
+                      <AlertCircle className="h-7 w-7" />
+                    </div>
+                    <h3 className="mt-4 text-xl font-semibold">Could not start camera</h3>
+                    <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                      {camError ?? "Something went wrong starting your camera."}
+                    </p>
+                    <Button onClick={startCamera} className="mt-5 gap-2">
+                      <RefreshCw className="h-4 w-4" /> Try again
+                    </Button>
+                  </Overlay>
+                )}
+                {camState === "ready" && detectorStatus === "loading" && (
+                  <Overlay key="model">
+                    <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                    <h3 className="mt-4 text-lg font-semibold">Loading AI model…</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">First time may take a moment.</p>
+                  </Overlay>
+                )}
+                {camState === "ready" && detectorStatus === "error" && (
+                  <Overlay key="modelErr">
+                    <div className="grid h-16 w-16 place-items-center rounded-2xl bg-destructive/15 text-destructive">
+                      <AlertCircle className="h-7 w-7" />
+                    </div>
+                    <h3 className="mt-4 text-xl font-semibold">AI model failed to load</h3>
+                    <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                      {detectorError ?? "Try refreshing the page."}
+                    </p>
+                  </Overlay>
+                )}
+              </AnimatePresence>
 
-            {/* Top-left timer */}
-            {sessionState !== "idle" && (
-              <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-sm font-medium text-white backdrop-blur">
-                <span className={`inline-block h-2 w-2 rounded-full ${sessionState === "running" ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
-                <span className="tabular-nums">{formatTimer(elapsed)}</span>
-              </div>
-            )}
-          </div>
-        </Card>
+              {sessionState !== "idle" && (
+                <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-sm font-medium text-white backdrop-blur">
+                  <span className={`inline-block h-2 w-2 rounded-full ${sessionState === "running" ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+                  <span className="tabular-nums">{formatTimer(elapsed)}</span>
+                </div>
+              )}
+
+              {sessionState !== "idle" && settings.breakRemindersMin > 0 && (
+                <BreakCountdown elapsed={elapsed} interval={settings.breakRemindersMin * 60} />
+              )}
+            </div>
+          </Card>
+
+          {/* Snapshot below video on the main column */}
+          <SnapshotPanel videoRef={videoRef} score={score} disabled={camState !== "ready" || detectorStatus !== "ready"} />
+        </div>
 
         {/* Side panel */}
         <div className="flex flex-col gap-4">
@@ -373,30 +411,51 @@ export default function Live() {
             </CardContent>
           </Card>
 
+          {/* Sub-score breakdown */}
+          {breakdown && (
+            <Card className="border-card-border">
+              <CardContent className="grid grid-cols-2 gap-3 p-5 text-center md:grid-cols-2">
+                <SubScore label="Neck" value={breakdown.neck} />
+                <SubScore label="Shoulders" value={breakdown.shoulder} />
+                <SubScore label="Head fwd" value={breakdown.forwardHead} />
+                <SubScore label="Spine" value={breakdown.spine} />
+              </CardContent>
+            </Card>
+          )}
+
+          <AICoachPanel
+            metrics={metrics}
+            breakdown={breakdown}
+            goodSecs={accDisplay.good}
+            sessionState={sessionState}
+          />
+
           <Card className="border-card-border">
             <CardContent className="grid grid-cols-3 gap-3 p-5 text-center">
-              <Stat label="Good" value={`${Math.round(accumulatedRef.current.good)}s`} accent="emerald" />
-              <Stat label="Fair" value={`${Math.round(accumulatedRef.current.fair)}s`} accent="amber" />
-              <Stat label="Bad" value={`${Math.round(accumulatedRef.current.bad)}s`} accent="rose" />
-            </CardContent>
-          </Card>
-
-          <Card className="border-card-border bg-gradient-to-br from-primary/5 to-accent/30">
-            <CardContent className="flex gap-3 p-5">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
-                <Lightbulb className="h-4 w-4" />
-              </div>
-              <div className="text-sm leading-relaxed">
-                <p className="font-medium">Tip</p>
-                <p className="mt-0.5 text-muted-foreground">
-                  Center yourself in frame so your shoulders, ears, and chest are visible. Soft daylight in front of you works best.
-                </p>
-              </div>
+              <Stat label="Good" value={`${accDisplay.good}s`} accent="emerald" />
+              <Stat label="Fair" value={`${accDisplay.fair}s`} accent="amber" />
+              <Stat label="Bad" value={`${accDisplay.bad}s`} accent="rose" />
             </CardContent>
           </Card>
         </div>
       </div>
     </div>
+  );
+}
+
+function BreakCountdown({ elapsed, interval }: { elapsed: number; interval: number }) {
+  const next = Math.max(0, interval - (elapsed % interval));
+  if (elapsed < 30) return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-xs font-medium text-white backdrop-blur">
+          <Coffee className="h-3.5 w-3.5" />
+          <span className="tabular-nums">{Math.floor(next / 60)}:{String(Math.floor(next % 60)).padStart(2, "0")}</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>Time until your next break reminder</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -432,6 +491,36 @@ function Stat({ label, value, accent }: { label: string; value: string; accent: 
   );
 }
 
+function SubScore({ label, value }: { label: string; value: number }) {
+  const tone =
+    value >= 75
+      ? "text-emerald-600 dark:text-emerald-400"
+      : value >= 55
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-rose-600 dark:text-rose-400";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex flex-col items-center gap-1">
+          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className={`absolute inset-y-0 left-0 ${
+                value >= 75 ? "bg-emerald-400" : value >= 55 ? "bg-amber-400" : "bg-rose-400"
+              }`}
+              style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+            />
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className={`text-sm font-semibold tabular-nums ${tone}`}>{value}</span>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+          </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{label} sub-score (higher is better)</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function playAlert(ctxRef: React.MutableRefObject<AudioContext | null>) {
   try {
     if (!ctxRef.current) {
@@ -453,8 +542,8 @@ function playAlert(ctxRef: React.MutableRefObject<AudioContext | null>) {
       osc.start(now + start);
       osc.stop(now + start + dur + 0.05);
     };
-    make(523.25, 0, 0.18); // C5
-    make(659.25, 0.18, 0.22); // E5
+    make(523.25, 0, 0.18);
+    make(659.25, 0.18, 0.22);
   } catch {
     /* ignore */
   }

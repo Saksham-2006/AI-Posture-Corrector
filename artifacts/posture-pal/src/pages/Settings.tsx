@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTheme } from "next-themes";
-import { Sun, Moon, Trash2, Volume2, VolumeX, Bell, Sliders } from "lucide-react";
+import { Sun, Moon, Trash2, Volume2, VolumeX, Bell, Sliders, Target } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -30,6 +30,8 @@ type Settings = {
   alertDelaySec: number;
   goodCutoff: number;
   badCutoff: number;
+  dailyGoalMin: number;
+  breakRemindersMin: number; // 0 = off
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -37,6 +39,8 @@ const DEFAULT_SETTINGS: Settings = {
   alertDelaySec: 5,
   goodCutoff: DEFAULT_THRESHOLDS.goodCutoff,
   badCutoff: DEFAULT_THRESHOLDS.badCutoff,
+  dailyGoalMin: 30,
+  breakRemindersMin: 25,
 };
 
 export default function Settings() {
@@ -88,10 +92,42 @@ export default function Settings() {
           </CardContent>
         </Card>
 
+        {/* Daily goal */}
+        <Card className="border-card-border">
+          <CardContent className="p-6">
+            <SectionHeading icon={<Target className="h-4 w-4" />}>Daily goal</SectionHeading>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Minutes of <span className="font-medium text-foreground">good posture</span> you'd like to hit each day.
+            </p>
+            <div className="mt-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Goal</Label>
+                <span className="text-xs tabular-nums text-primary">
+                  {settings.dailyGoalMin} min
+                </span>
+              </div>
+              <Slider
+                className="mt-3"
+                min={5}
+                max={120}
+                step={5}
+                value={[settings.dailyGoalMin]}
+                onValueChange={([v]) => update({ dailyGoalMin: v ?? 30 })}
+                data-testid="slider-daily-goal"
+              />
+              <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+                <span>5m</span>
+                <span>60m</span>
+                <span>2h</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Alerts */}
         <Card className="border-card-border">
           <CardContent className="p-6">
-            <SectionHeading icon={<Bell className="h-4 w-4" />}>Alerts</SectionHeading>
+            <SectionHeading icon={<Bell className="h-4 w-4" />}>Alerts &amp; breaks</SectionHeading>
 
             <div className="mt-4 flex items-center justify-between">
               <div>
@@ -113,7 +149,7 @@ export default function Settings() {
 
             <div>
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Alert delay</Label>
+                <Label className="text-sm font-medium">Posture alert delay</Label>
                 <span className="text-xs tabular-nums text-muted-foreground">
                   {settings.alertDelaySec}s
                 </span>
@@ -129,6 +165,29 @@ export default function Settings() {
                 value={[settings.alertDelaySec]}
                 onValueChange={([v]) => update({ alertDelaySec: v ?? 5 })}
                 data-testid="slider-alert-delay"
+              />
+            </div>
+
+            <Separator className="my-5" />
+
+            <div>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Break reminders</Label>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {settings.breakRemindersMin === 0 ? "Off" : `Every ${settings.breakRemindersMin}m`}
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Suggest a stretch or movement during long sessions.
+              </p>
+              <Slider
+                className="mt-3"
+                min={0}
+                max={60}
+                step={5}
+                value={[settings.breakRemindersMin]}
+                onValueChange={([v]) => update({ breakRemindersMin: v ?? 25 })}
+                data-testid="slider-break-reminders"
               />
             </div>
           </CardContent>
@@ -190,7 +249,7 @@ export default function Settings() {
         </Card>
 
         {/* Data */}
-        <Card className="border-card-border">
+        <Card className="border-card-border lg:col-span-2">
           <CardContent className="p-6">
             <SectionHeading icon={<Trash2 className="h-4 w-4" />}>Your data</SectionHeading>
             <p className="mt-1 text-xs text-muted-foreground">

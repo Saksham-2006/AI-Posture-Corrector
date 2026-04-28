@@ -1,24 +1,59 @@
+import { useMemo } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowRight, Activity, Award, Clock, TrendingUp, Flame, CheckCircle2, Lock } from "lucide-react";
+import { ArrowRight, Activity, Award, Clock, TrendingUp, Flame, CheckCircle2, Lock, Trophy } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { PageHeader } from "@/components/PageHeader";
+import { GoalRing } from "@/components/GoalRing";
+import { LevelBadge } from "@/components/LevelBadge";
 import { useSessions } from "@/features/sessions/useSessions";
 import { computeStreak, todayStats } from "@/features/sessions/streak";
 import { evaluateAchievements } from "@/features/sessions/achievements";
+import { computeXP, levelTitle } from "@/features/gamification/xp";
+import { todayGoalProgress, countGoalDays } from "@/features/gamification/goals";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { SETTINGS_KEY } from "@/features/sessions/sessionStore";
+import { DEFAULT_THRESHOLDS } from "@/features/posture/scoring";
 import { formatDuration, formatRelativeTime, formatTimer } from "@/lib/format";
+
+type Settings = {
+  alertSound: boolean;
+  alertDelaySec: number;
+  goodCutoff: number;
+  badCutoff: number;
+  dailyGoalMin: number;
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  alertSound: true,
+  alertDelaySec: 5,
+  goodCutoff: DEFAULT_THRESHOLDS.goodCutoff,
+  badCutoff: DEFAULT_THRESHOLDS.badCutoff,
+  dailyGoalMin: 30,
+};
 
 export default function Dashboard() {
   const { sessions } = useSessions();
+  const [settings] = useLocalStorage<Settings>(SETTINGS_KEY, DEFAULT_SETTINGS);
   const streak = computeStreak(sessions);
   const today = todayStats(sessions);
   const achievements = evaluateAchievements(sessions);
   const unlocked = achievements.filter((a) => a.unlockedAt);
   const next = achievements.find((a) => !a.unlockedAt);
   const recent = [...sessions].sort((a, b) => b.startedAt - a.startedAt).slice(0, 5);
+
+  const goalDays = useMemo(
+    () => countGoalDays(sessions, settings.dailyGoalMin),
+    [sessions, settings.dailyGoalMin],
+  );
+  const xp = useMemo(() => computeXP(sessions, goalDays), [sessions, goalDays]);
+  const goal = useMemo(
+    () => todayGoalProgress(sessions, settings.dailyGoalMin),
+    [sessions, settings.dailyGoalMin],
+  );
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -69,15 +104,32 @@ export default function Dashboard() {
           tint="mint"
         />
         <Kpi
-          Icon={Activity}
-          label="Sessions today"
-          value={String(today.sessionCount)}
+          Icon={Trophy}
+          label="Level"
+          value={`${xp.level}`}
           tint="sky"
         />
       </motion.div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
+          {/* Goal + level */}
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card className="border-card-border bg-gradient-to-br from-primary/5 via-card to-accent/20">
+              <CardContent className="p-6">
+                <GoalRing goalMin={settings.dailyGoalMin} goodMin={goal.goodMin} />
+              </CardContent>
+            </Card>
+            <Link href="/profile" className="block">
+              <div className="hover-elevate rounded-2xl">
+                <LevelBadge xp={xp} />
+                <p className="mt-2 px-1 text-xs text-muted-foreground">
+                  {levelTitle(xp.level)} • Tap for details
+                </p>
+              </div>
+            </Link>
+          </div>
+
           {/* Today's posture distribution */}
           <Card className="border-card-border overflow-hidden">
             <CardContent className="p-6">
@@ -169,9 +221,9 @@ export default function Dashboard() {
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Award className="h-4 w-4 text-primary" /> Achievements
               </h2>
-              <span className="text-xs text-muted-foreground">
+              <Link href="/profile" className="text-xs text-muted-foreground hover:text-foreground">
                 {unlocked.length}/{achievements.length}
-              </span>
+              </Link>
             </div>
 
             {next && !next.unlockedAt && (

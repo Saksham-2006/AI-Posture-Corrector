@@ -12,6 +12,7 @@ import { ONBOARDING_KEY } from "@/features/sessions/sessionStore";
 import Dashboard from "@/pages/Dashboard";
 import Live from "@/pages/Live";
 import Analytics from "@/pages/Analytics";
+import Profile from "@/pages/Profile";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 import { useLocation } from "wouter";
@@ -42,6 +43,7 @@ function Routes() {
         <Route path="/" component={Dashboard} />
         <Route path="/live" component={Live} />
         <Route path="/analytics" component={Analytics} />
+        <Route path="/profile" component={Profile} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
