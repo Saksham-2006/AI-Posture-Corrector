@@ -1,0 +1,25 @@
+Create a new AI-powered posture corrector web application from scratch. The application must be stable, well-structured, modular, and visually modern, with real-time posture detection using AI/ML.
+
+Use MediaPipe or TensorFlow.js to implement real-time pose estimation through the user’s webcam. Detect key body landmarks including nose, ears, shoulders, and hips. Based on these landmarks, calculate posture-related metrics such as neck tilt angle, shoulder alignment difference, forward head posture, and approximate spine alignment.
+
+Implement posture classification into Good posture and Bad posture using either rule-based logic (angle thresholds) or a lightweight ML approach. Display a real-time posture score from 0 to 100 along with a confidence level. Continuously monitor posture and trigger an alert if incorrect posture is maintained for a few seconds.
+
+Build a real-time interface with a live webcam feed and overlay a skeleton on the user’s body. Use color indicators where green represents correct posture and red represents incorrect posture. Include a session timer and live posture score display.
+
+Create an analytics dashboard that tracks total session time, time spent in correct vs incorrect posture, and average posture score. Include visualizations such as a line chart for posture score over time, a pie chart for posture distribution, and a bar chart for daily session performance. Store session data locally in the browser or use a simple backend if necessary.
+
+Add basic gamification features such as a daily streak counter, simple achievements (for example: maintaining good posture for 10 minutes or completing a full session), and a basic scoring system.
+
+Design the UI to be minimal, modern, and visually appealing using a pastel color palette (soft blue, lavender, mint green), rounded corners, subtle shadows, and clean spacing. Use modern typography such as Inter or Poppins and consistent icons from Lucide or Heroicons.
+
+Include the following pages: a dashboard/home page, a live posture detection page (main feature), an analytics page, and a settings page.
+
+Add essential UI features including dark/light mode toggle, smooth transitions and animations, responsive design for both mobile and desktop, and proper loading states such as skeleton loaders.
+
+Structure the project cleanly using React and Tailwind CSS. Use Context API or Zustand for state management. Organize the code into modular folders such as components, features, hooks, services, utils, and models. Use Chart.js or Recharts for data visualization. Optionally include a lightweight Node.js and Express backend only if needed.
+
+Ensure the app includes smooth animations (preferably with Framer Motion), a simple onboarding flow for camera permissions and usage instructions, tooltips for guidance, proper error handling (especially for camera access issues), and optimized performance.
+
+The final result should be a clean, bug-free, production-quality web app that demonstrates real AI posture detection, includes analytics and basic gamification, has a modern aesthetic UI, and is impressive for academic or project evaluation.
+
+Do not reuse old buggy code. Build everything cleanly from scratch with maintainable and readable code. Avoid unnecessary complexity and prioritize stability, performance, and user experience.
