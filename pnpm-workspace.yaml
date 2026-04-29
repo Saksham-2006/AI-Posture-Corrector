@@ -40,6 +40,24 @@ packages:
   - lib/integrations/*
   - scripts
 
+# Make pnpm install native binaries for all common platforms, not just the
+# host's. This prevents "Cannot find module @rollup/rollup-win32-x64-msvc",
+# "@esbuild/win32-x64", "lightningcss-win32-x64-msvc", etc. on Windows.
+supportedArchitectures:
+  os:
+    - current
+    - win32
+    - linux
+    - darwin
+  cpu:
+    - current
+    - x64
+    - arm64
+  libc:
+    - current
+    - glibc
+    - musl
+
 catalog:
   '@replit/vite-plugin-cartographer': ^0.5.1
   '@replit/vite-plugin-dev-banner': ^0.1.1
