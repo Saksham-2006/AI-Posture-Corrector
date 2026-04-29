@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "2TXnAw53lZkH98iq1WsME"
+uri = "file://windows-local/posture-pal/README.md"
+type = "text"
+title = "Run Posture Pal on Windows — Step-by-Step Guide"
