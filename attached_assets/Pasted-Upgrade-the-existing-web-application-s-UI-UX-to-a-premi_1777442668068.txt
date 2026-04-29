@@ -1,0 +1,76 @@
+Upgrade the existing web application’s UI/UX to a premium, modern, and visually appealing design without breaking current functionality. Do not change core logic unless necessary. Focus on styling, layout, and user experience.
+
+Redesign the entire interface using a glassmorphism-inspired design system. Use soft translucent backgrounds with backdrop blur, subtle gradients, and layered depth. Maintain a clean and minimal aesthetic. Avoid overly rounded corners; use slightly soft corners (medium border radius) for a balanced modern look.
+
+Use a pastel color palette with soft tones such as light blue, lavender, mint green, and subtle neutral backgrounds. Ensure colors are consistent across the app and work well in both light and dark modes.
+
+Improve typography using modern fonts such as Inter or Poppins. Ensure clear hierarchy with proper font sizes, spacing, and readability.
+
+Create a modern navigation system:
+
+Add a clean top navigation bar with logo, navigation links, and user profile section
+Include icons from Lucide or Heroicons with a pastel style
+Add hover effects and smooth transitions
+Make navigation responsive (collapse into a menu on smaller screens)
+
+Implement dark and light mode with a smooth toggle and persistent user preference.
+
+Enhance UI components:
+
+Cards with glass effect (blur, transparency, subtle border)
+Buttons with soft gradients and hover animations
+Inputs with focus states and clean outlines
+Use consistent spacing and alignment throughout
+
+Add micro-interactions:
+
+Smooth hover effects
+Subtle animations (using Framer Motion if possible)
+Transition effects between pages and components
+
+Improve layout structure:
+
+Use a proper grid system
+Maintain whitespace for a premium feel
+Align elements consistently
+
+Add authentication system (UI + basic functionality):
+
+Create Sign Up and Login pages with clean modern design
+Use glass-style forms with proper validation states
+Include fields: email, password, confirm password (for signup)
+Add show/hide password toggle
+Add basic authentication logic (can use local storage or simple backend)
+Add user session handling
+Show logged-in user profile/avatar in navbar
+Add logout functionality
+
+Ensure forms are user-friendly:
+
+Error messages
+Input validation
+Loading states
+
+Improve visual hierarchy:
+
+Highlight important elements like posture score, alerts, and analytics
+Use color contrast smartly (not harsh)
+
+Polish the entire UI:
+
+Add subtle shadows and depth
+Add smooth page transitions
+Add loading skeletons instead of plain spinners
+Ensure responsive design across all screen sizes
+
+Maintain performance:
+
+Do not introduce lag
+Optimize CSS and animations
+
+Keep code clean and modular:
+
+Separate UI components properly
+Use reusable styled components where possible
+
+Final result should look like a premium SaaS product with glassmorphism styling, smooth UX, modern navigation, pastel aesthetics, and a complete authentication flow, while keeping the app fast and stable.

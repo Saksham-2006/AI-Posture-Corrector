@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Toaster } from "@/components/ui/toaster";
@@ -8,14 +8,16 @@ import { AppShell } from "@/components/layout/AppShell";
 import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { ONBOARDING_KEY } from "@/features/sessions/sessionStore";
+import { AuthProvider } from "@/features/auth/AuthContext";
 
 import Dashboard from "@/pages/Dashboard";
 import Live from "@/pages/Live";
 import Analytics from "@/pages/Analytics";
 import Profile from "@/pages/Profile";
 import Settings from "@/pages/Settings";
+import Login from "@/pages/Login";
+import Signup from "@/pages/Signup";
 import NotFound from "@/pages/not-found";
-import { useLocation } from "wouter";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +47,8 @@ function Routes() {
         <Route path="/analytics" component={Analytics} />
         <Route path="/profile" component={Profile} />
         <Route path="/settings" component={Settings} />
+        <Route path="/login" component={Login} />
+        <Route path="/signup" component={Signup} />
         <Route component={NotFound} />
       </Switch>
     </PageTransition>
@@ -53,12 +57,16 @@ function Routes() {
 
 function ShellWithOnboarding() {
   const [onboarded, setOnboarded] = useLocalStorage<boolean>(ONBOARDING_KEY, false);
+  const [loc] = useLocation();
+  const isAuthRoute = loc === "/login" || loc === "/signup";
   return (
     <>
       <AppShell>
         <Routes />
       </AppShell>
-      <OnboardingModal open={!onboarded} onComplete={() => setOnboarded(true)} />
+      {!isAuthRoute && (
+        <OnboardingModal open={!onboarded} onComplete={() => setOnboarded(true)} />
+      )}
     </>
   );
 }
@@ -68,9 +76,11 @@ function App() {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delayDuration={150}>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <ShellWithOnboarding />
-          </WouterRouter>
+          <AuthProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <ShellWithOnboarding />
+            </WouterRouter>
+          </AuthProvider>
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>
